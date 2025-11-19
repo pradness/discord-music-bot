@@ -98,7 +98,7 @@ def embed_message(em_type, em_type2, query=None, first_song=None, song_details=N
                     return error_embed
                 case 3:
                     added_embed = discord.Embed(
-                        description=f"<:play:1400019949019205634> Added to Queue\n###**[{first_song['title']}]({first_song['webpage_url']})**\n**{first_song.get('uploader')}**\n**Duration: {format_duration(first_song.get('duration', 0))}**",
+                        description=f"<:play:1400019949019205634> Added to Queue\n### **[{first_song['title']}]({first_song['webpage_url']})**\n**{first_song.get('uploader')}**\n**Duration: {format_duration(first_song.get('duration', 0))}**",
                         color=color
                     )
                     added_embed.set_thumbnail(url=first_song['thumbnail'])

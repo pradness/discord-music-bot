@@ -145,6 +145,9 @@ env.bak/
 venv.bak/
 dc_env/
 
+# FFMPEG files
+bin/ffmpeg/*
+
 # Spyder project settings
 .spyderproject
 .spyproject

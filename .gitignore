@@ -144,6 +144,7 @@ ENV/
 env.bak/
 venv.bak/
 dc_env/
+dc_env310/
 
 # FFMPEG files
 bin/ffmpeg/*

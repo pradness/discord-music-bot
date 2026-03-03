@@ -7,7 +7,7 @@ from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
 import yt_dlp
-from collections import deque
+from collections import deque, defaultdict
 import asyncio
 
 # Setup token in .env as DISCORD_TOKEN=....
@@ -17,6 +17,8 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 SONG_QUEUES = {}
 LOOP_STATES = {} # Stores loop state (False, 'song', 'queue')
 CURRENT_SONGS = {} # Stores the current song for looping
+VOICE_CONNECT_LOCKS = defaultdict(asyncio.Lock)
+VOICE_RETRY_AFTER = {}
 
 async def search_ytdlp_async(query, ydl_opts):
     running_loop: AbstractEventLoop = asyncio.get_running_loop()
@@ -32,6 +34,65 @@ intents.message_content = True
 
 # Bot setup, IDK if this is needed since bot doesn't work on text commands
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+async def reset_guild_voice_state(guild: discord.Guild, wait_seconds: float = 3.0):
+    try:
+        await guild.change_voice_state(channel=None)
+    except Exception:
+        pass
+
+    member = guild.me
+    if member is None:
+        return
+
+    end_time = asyncio.get_running_loop().time() + wait_seconds
+    while asyncio.get_running_loop().time() < end_time:
+        member = guild.me
+        if member is None or member.voice is None:
+            return
+        await asyncio.sleep(0.2)
+
+async def connect_with_retries(voice_channel: discord.VoiceChannel, attempts: int = 4, timeout: float = 20.0):
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            await reset_guild_voice_state(voice_channel.guild)
+            return await voice_channel.connect(timeout=timeout, reconnect=False)
+        except discord.errors.ConnectionClosed as error:
+            if getattr(error, "code", None) == 4017:
+                raise RuntimeError("DAVE_REQUIRED") from error
+            last_error = error
+        except discord.ClientException:
+            guild_voice_client = voice_channel.guild.voice_client
+            if guild_voice_client and guild_voice_client.is_connected():
+                return guild_voice_client
+            last_error = None
+            await reset_guild_voice_state(voice_channel.guild)
+        except Exception as error:
+            last_error = error
+
+            guild_voice_client = voice_channel.guild.voice_client
+            if guild_voice_client:
+                try:
+                    await guild_voice_client.disconnect(force=True)
+                except Exception:
+                    pass
+
+            await reset_guild_voice_state(voice_channel.guild)
+
+            if attempt < attempts:
+                await asyncio.sleep(min(2 * attempt, 5))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Could not connect to the voice channel.")
+
+def get_retry_wait_seconds(guild_id: int) -> int:
+    retry_at = VOICE_RETRY_AFTER.get(guild_id)
+    if retry_at is None:
+        return 0
+    remaining = int(retry_at - asyncio.get_running_loop().time())
+    return remaining if remaining > 0 else 0
 
 # Bot ready-up code
 @bot.event
@@ -238,6 +299,15 @@ async def stop(interaction: discord.Interaction):
 async def play(interaction: discord.Interaction, query: str):
     await interaction.response.defer(thinking=True)
 
+    wait_seconds = get_retry_wait_seconds(interaction.guild_id)
+    if wait_seconds > 0:
+        embed = discord.Embed(
+            description=f"<:warn:1400378403932213294> Voice connection is cooling down. Try again in `{wait_seconds}s`.",
+            color=color
+        )
+        await interaction.followup.send(embed=embed)
+        return
+
     voice_channel = interaction.user.voice.channel if interaction.user.voice else None
     if voice_channel is None:
         embed = embed_message(5, 1)
@@ -245,10 +315,48 @@ async def play(interaction: discord.Interaction, query: str):
         return
 
     voice_client = interaction.guild.voice_client
-    if voice_client is None:
-        voice_client = await voice_channel.connect()
-    elif voice_channel != voice_client.channel:
-        await voice_client.move_to(voice_channel)
+    guild_lock = VOICE_CONNECT_LOCKS[interaction.guild_id]
+    async with guild_lock:
+        voice_client = interaction.guild.voice_client
+
+        if voice_client is None or not voice_client.is_connected():
+            try:
+                voice_client = await connect_with_retries(voice_channel)
+            except RuntimeError as error:
+                if str(error) == "DAVE_REQUIRED":
+                    VOICE_RETRY_AFTER[interaction.guild_id] = asyncio.get_running_loop().time() + 30
+                    embed = discord.Embed(
+                        description="<:warn:1400378403932213294> Voice server requires **E2EE/DAVE** and the handshake was rejected. Please retry in a few seconds.",
+                        color=color
+                    )
+                    await interaction.followup.send(embed=embed)
+                    return
+
+                VOICE_RETRY_AFTER[interaction.guild_id] = asyncio.get_running_loop().time() + 15
+                embed = discord.Embed(
+                    description="<:dino:1400378459401879592> I couldn't connect to that voice channel. Please try once more in a few seconds.",
+                    color=color
+                )
+                await interaction.followup.send(embed=embed)
+                return
+            except Exception:
+                VOICE_RETRY_AFTER[interaction.guild_id] = asyncio.get_running_loop().time() + 15
+                embed = discord.Embed(
+                    description="<:dino:1400378459401879592> I couldn't connect to that voice channel. Please try once more in a few seconds.",
+                    color=color
+                )
+                await interaction.followup.send(embed=embed)
+                return
+        elif voice_channel != voice_client.channel:
+            try:
+                await voice_client.move_to(voice_channel)
+            except Exception:
+                embed = discord.Embed(
+                    description="<:dino:1400378459401879592> I couldn't move to your voice channel right now. Please try again.",
+                    color=color
+                )
+                await interaction.followup.send(embed=embed)
+                return
 
     import re
 

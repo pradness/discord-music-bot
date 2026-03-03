@@ -1,4 +1,6 @@
-# discord-music-bot
+<picture align="center">
+  <img alt="μsic Logo" src="bin/banner.png">
+</picture>
 
 μsic is a Discord music bot that plays audio from YouTube and supports Spotify links via search.
 

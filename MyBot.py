@@ -507,9 +507,23 @@ async def play_next_song(voice_client, guild_id, channel):
     if song_to_play:
         song_to_play['start_time'] = discord.utils.utcnow()
         CURRENT_SONGS[guild_id] = song_to_play
-        
+
+        # Re-fetch a fresh stream URL so expired YouTube links never reach FFmpeg.
+        webpage_url = song_to_play.get('webpage_url')
+        if webpage_url:
+            try:
+                fresh_info = await search_ytdlp_async(
+                    webpage_url,
+                    {"format": "bestaudio[abr<=96]/bestaudio", "noplaylist": True},
+                )
+                fresh_url = fresh_info.get("url") if fresh_info else None
+                if fresh_url:
+                    song_to_play['audio_url'] = fresh_url
+            except Exception as e:
+                print(f"Warning: could not refresh URL for {song_to_play.get('title')}: {e}")
+
         ffmpeg_options = {
-            "before_options": "-nostdin",
+            "before_options": "-nostdin -protocol_whitelist file,http,https,tcp,tls,crypto",
             "options": "-vn",
         }
         source = discord.FFmpegOpusAudio(

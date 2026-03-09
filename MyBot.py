@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 from asyncio import AbstractEventLoop
 import json
 import shutil
@@ -33,12 +34,24 @@ def resolve_ffmpeg_executable() -> str:
         return ffmpeg_in_path
 
     # 2) Try common local bundled paths in the repository.
-    local_candidates = [
-        os.path.join("bin", "ffmpeg", "ffmpeg.exe"),
-        os.path.join("bin", "ffmpeg", "ffmpeg"),
-    ]
+    is_windows = sys.platform.startswith("win")
+    local_candidates = [os.path.join("bin", "ffmpeg", "ffmpeg.exe"), os.path.join("bin", "ffmpeg", "ffmpeg")]
     for candidate in local_candidates:
-        if os.path.isfile(candidate):
+        if not os.path.isfile(candidate):
+            continue
+
+        # Prevent Linux hosts from trying to execute a Windows binary.
+        if not is_windows and candidate.lower().endswith(".exe"):
+            continue
+
+        # On Unix-like systems make sure file is executable.
+        if not is_windows and not os.access(candidate, os.X_OK):
+            continue
+
+        if is_windows and candidate.lower().endswith("ffmpeg"):
+            # Avoid picking a Unix binary on Windows if both are present.
+            continue
+
             return candidate
 
     # 3) Final fallback: use Python package bundled ffmpeg binary.

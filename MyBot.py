@@ -2,6 +2,7 @@ import os
 import re
 from asyncio import AbstractEventLoop
 import json
+import shutil
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -24,6 +25,29 @@ LOOP_STATES = {} # Stores loop state (False, 'song', 'queue')
 CURRENT_SONGS = {} # Stores the current song for looping
 VOICE_CONNECT_LOCKS = defaultdict(asyncio.Lock)
 VOICE_RETRY_AFTER = {}
+
+def resolve_ffmpeg_executable() -> str:
+    # 1) Prefer ffmpeg available in PATH.
+    ffmpeg_in_path = shutil.which("ffmpeg")
+    if ffmpeg_in_path:
+        return ffmpeg_in_path
+
+    # 2) Try common local bundled paths in the repository.
+    local_candidates = [
+        os.path.join("bin", "ffmpeg", "ffmpeg.exe"),
+        os.path.join("bin", "ffmpeg", "ffmpeg"),
+    ]
+    for candidate in local_candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    # 3) Final fallback: use Python package bundled ffmpeg binary.
+    try:
+        import imageio_ffmpeg  # type: ignore
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
 
 async def search_ytdlp_async(query, ydl_opts):
     running_loop: AbstractEventLoop = asyncio.get_running_loop()
@@ -456,7 +480,11 @@ async def play_next_song(voice_client, guild_id, channel):
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn -c:a libopus -b:a 96k",
         }
-        source = discord.FFmpegOpusAudio(song_to_play['audio_url'], **ffmpeg_options)
+        source = discord.FFmpegOpusAudio(
+            song_to_play['audio_url'],
+            executable=resolve_ffmpeg_executable(),
+            **ffmpeg_options,
+        )
 
         def after_play(error):
             if error:

@@ -8,6 +8,7 @@ discord.py==2.7.0
 dotenv==0.9.9
 frozenlist==1.7.0
 idna==3.10
+imageio-ffmpeg==0.6.0
 multidict==6.6.3
 propcache==0.3.2
 pycparser==2.22

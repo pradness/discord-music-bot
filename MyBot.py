@@ -53,7 +53,7 @@ def resolve_ffmpeg_executable() -> str:
             # Avoid picking a Unix binary on Windows if both are present.
             continue
 
-            return candidate
+        return candidate
 
     # 3) Final fallback: use Python package bundled ffmpeg binary.
     try:
@@ -509,13 +509,12 @@ async def play_next_song(voice_client, guild_id, channel):
         CURRENT_SONGS[guild_id] = song_to_play
         
         ffmpeg_options = {
-            "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "before_options": "-nostdin",
             "options": "-vn",
         }
         source = discord.FFmpegOpusAudio(
             song_to_play['audio_url'],
             executable=resolve_ffmpeg_executable(),
-            stderr=subprocess.PIPE,
             **ffmpeg_options,
         )
 

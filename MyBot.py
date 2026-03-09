@@ -14,6 +14,11 @@ import asyncio
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+if not TOKEN or not TOKEN.strip():
+    raise RuntimeError(
+        "DISCORD_TOKEN is missing. Set it in a local .env file or as a Railway service variable."
+    )
+
 SONG_QUEUES = {}
 LOOP_STATES = {} # Stores loop state (False, 'song', 'queue')
 CURRENT_SONGS = {} # Stores the current song for looping

@@ -101,6 +101,24 @@ You should see:
 <bot_name>#<discriminator> is online!
 ```
 
+## Railway Deployment (with FFmpeg)
+
+This repo includes `nixpacks.toml` so Railway installs FFmpeg during build.
+
+### Build and Start
+
+- Build command: `pip install -r requirements.txt`
+- Start command: `python MyBot.py`
+
+### Required Railway Variables
+
+- `DISCORD_TOKEN` = your bot token
+
+### Notes
+
+- `runtime.txt` is set to Python 3.10 for better voice stability.
+- If you changed build settings earlier, trigger a fresh deploy after pushing latest files.
+
 ## Common Issues
 
 - **`PyNaCl library needed in order to use voice`**
@@ -110,6 +128,12 @@ You should see:
 	- This is related to E2EE/DAVE voice requirements.
 	- Ensure dependencies are installed from `requirements.txt` (includes `davey`).
 	- Restart the bot after dependency installation.
+
+- **`Timed out connecting to voice` (common on Replit)**
+	- This usually means the host cannot complete Discord voice UDP transport.
+	- Replit often works for text/slash bots, but voice bots may fail due to networking limits.
+	- Try a host with reliable outbound UDP support (VPS, Railway, Render, Fly.io, etc.).
+	- If you must test on Replit, keep expectations low for voice playback reliability.
 
 - **`ffmpeg` not found / no audio**
 	- Confirm `ffmpeg -version` works in the same terminal where you run the bot.

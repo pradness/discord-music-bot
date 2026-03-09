@@ -4,6 +4,7 @@ import sys
 from asyncio import AbstractEventLoop
 import json
 import shutil
+import subprocess
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -61,6 +62,23 @@ def resolve_ffmpeg_executable() -> str:
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception:
         return "ffmpeg"
+
+def log_ffmpeg_info() -> None:
+    ffmpeg_executable = resolve_ffmpeg_executable()
+    print(f"Using FFmpeg executable: {ffmpeg_executable}")
+
+    try:
+        result = subprocess.run(
+            [ffmpeg_executable, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        first_line = result.stdout.splitlines()[0] if result.stdout else "<no version output>"
+        print(f"FFmpeg version: {first_line}")
+    except Exception as error:
+        print(f"Could not read FFmpeg version: {error}")
 
 async def search_ytdlp_async(query, ydl_opts):
     running_loop: AbstractEventLoop = asyncio.get_running_loop()
@@ -141,6 +159,7 @@ def get_retry_wait_seconds(guild_id: int) -> int:
 async def on_ready():
     await bot.tree.sync()
     print(f"{bot.user} is online!")
+    log_ffmpeg_info()
 
 # ----------------------- EMBED FUNCTION -----------------------
 color= discord.Color(0x2f222b)
@@ -490,12 +509,13 @@ async def play_next_song(voice_client, guild_id, channel):
         CURRENT_SONGS[guild_id] = song_to_play
         
         ffmpeg_options = {
-            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn -c:a libopus -b:a 96k",
+            "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "options": "-vn",
         }
         source = discord.FFmpegOpusAudio(
             song_to_play['audio_url'],
             executable=resolve_ffmpeg_executable(),
+            stderr=subprocess.PIPE,
             **ffmpeg_options,
         )
 
